@@ -1,7 +1,9 @@
 import NextAuth from "next-auth/next";
 import GoogleProvider from "next-auth/providers/google";
 import GithubProvider from "next-auth/providers/github";
-import EmailProvider from "next-auth/providers/email";
+
+import User from "@models/user";
+import { connectToDatabase } from "@utils/database";
 
 const handler = NextAuth({
   providers: [
@@ -15,8 +17,39 @@ const handler = NextAuth({
     }),
   ],
 
-  async session({ session }) {},
-  async signIn({ profile }) {},
+  async session({ session }) {
+    const sessionUser = await User.findOne({
+      email: session.user.email,
+    });
+
+    session.user.id = sessionUser._id.toString();
+
+    return session;
+  },
+  async signIn({ profile }) {
+    try {
+      await connectToDatabase();
+
+      // checking if user already exists
+      const userExists = await User.findOne({
+        email: profile.email,
+      });
+
+      // if user doesn't exists, create new user
+      if (!userExists) {
+        await User.create({
+          email: profile.email,
+          username: profile.name.replace(" ", "").toLowerCase(),
+          image: profile.picture,
+        });
+      }
+
+      return true;
+    } catch (error) {
+      console.log(error);
+      return false;
+    }
+  },
 });
 
 export { handler as GET, handler as POST };
